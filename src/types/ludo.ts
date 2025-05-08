@@ -20,9 +20,10 @@ export interface GameState {
   pendingDiceValues: number[]; // Stores dice values yet to be played in the current turn
   rolledDoubles: boolean; // True if the current roll was a double
   diceRolledInTurn: boolean; // True if dice has been rolled for the current turn phase
-  gameStatus: 'ROLL_DICE' | 'SELECT_TOKEN' | 'GAME_OVER' | 'START_GAME';
+  gameStatus: 'COLOR_SELECTION' | 'ROLL_DICE' | 'SELECT_TOKEN' | 'GAME_OVER' | 'START_GAME';
   winner: PlayerColor | null;
   message: string; // To display game messages/instructions
+  humanPlayerColor: PlayerColor | null; // Identifies the color controlled by the human player
   // numConsecutiveDoubles: number; // For future advanced rules like 3 doubles penalty
 }
 
@@ -43,3 +44,4 @@ export interface BoardCell {
   isSafe?: boolean; // For track cells
   isStart?: PlayerColor; // Marks start square for a player
 }
+

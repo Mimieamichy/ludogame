@@ -1,20 +1,18 @@
+
 "use client";
 
 import React from 'react';
 import type { Token, PlayerColor, ValidMove, BoardCell as BoardCellType, GameState } from '@/types/ludo';
 import { 
-  GRID_SIZE, 
   PLAYER_TAILWIND_COLORS, 
   PLAYER_TAILWIND_BG_LIGHT,
   BASE_TOKEN_POSITIONS, 
   TRACK_COORDINATES, 
   HOME_PATH_COORDINATES,
   BOARD_CELLS,
-  PLAYER_START_OFFSETS,
-  SAFE_SQUARE_INDICES
 } from '@/lib/ludo-constants';
 import { calculateGlobalTrackPosition } from '@/lib/ludo-logic';
-import TokenPiece from './TokenPiece'; // Renamed from Token.tsx to avoid conflict
+import TokenPiece from './TokenPiece';
 import { cn } from '@/lib/utils';
 import { Home, Star, Zap } from 'lucide-react';
 
@@ -26,10 +24,11 @@ interface BoardProps {
   currentPlayer: PlayerColor;
   onMoveSelect: (move: ValidMove) => void;
   gameStatus: GameState['gameStatus'];
+  humanPlayerColor: PlayerColor | null;
 }
 
 const BoardCell: React.FC<{ cell: BoardCellType; children?: React.ReactNode; onClick?: () => void; isHighlighted?: boolean }> = ({ cell, children, onClick, isHighlighted }) => {
-  let bgColor = 'bg-background dark:bg-neutral-700'; // Neutral background for track
+  let bgColor = 'bg-background dark:bg-neutral-700'; 
   let borderColor = 'border-neutral-300 dark:border-neutral-600';
   let textColor = 'text-foreground';
 
@@ -38,27 +37,24 @@ const BoardCell: React.FC<{ cell: BoardCellType; children?: React.ReactNode; onC
     borderColor = cell.playerColor ? PLAYER_TAILWIND_COLORS[cell.playerColor].border : 'border-gray-400';
   } else if (cell.type === 'homepath') {
     bgColor = cell.playerColor ? PLAYER_TAILWIND_COLORS[cell.playerColor].bg : 'bg-gray-200 dark:bg-gray-600';
-    textColor = cell.playerColor ? PLAYER_TAILWIND_COLORS[cell.playerColor].text : 'text-white';
+    textColor = cell.playerColor ? (PLAYER_TAILWIND_COLORS[cell.playerColor].text === 'text-yellow-900' ? 'text-black' : 'text-white') : 'text-white';
     borderColor = cell.playerColor ? PLAYER_TAILWIND_COLORS[cell.playerColor].border : 'border-gray-400';
   } else if (cell.type === 'track') {
     if (cell.isStart) {
       bgColor = cell.isStart ? PLAYER_TAILWIND_COLORS[cell.isStart].bg : bgColor;
-      textColor = cell.isStart ? PLAYER_TAILWIND_COLORS[cell.isStart].text : textColor;
-    }
-     if (cell.isSafe) {
-       // bgColor = 'bg-pink-200 dark:bg-pink-700'; // specific safe square color
+      textColor = cell.isStart ? (PLAYER_TAILWIND_COLORS[cell.isStart].text === 'text-yellow-900' ? 'text-black' : 'text-white') : textColor;
     }
   } else if (cell.type === 'center') {
-    bgColor = 'bg-purple-200 dark:bg-purple-800'; // Center triangle area
-    borderColor = 'border-purple-400 dark:border-purple-600';
+    bgColor = 'bg-purple-300 dark:bg-purple-900'; 
+    borderColor = 'border-purple-500 dark:border-purple-700';
   } else if (cell.type === 'entry') {
      bgColor = cell.playerColor ? PLAYER_TAILWIND_COLORS[cell.playerColor].bg : bgColor;
-     textColor = cell.playerColor ? PLAYER_TAILWIND_COLORS[cell.playerColor].text : textColor;
+     textColor = cell.playerColor ? (PLAYER_TAILWIND_COLORS[cell.playerColor].text === 'text-yellow-900' ? 'text-black' : 'text-white') : textColor;
   }
   
-  // Special styling for the central final home square for each player
-  if (cell.type === 'homepath' && HOME_PATH_COORDINATES[cell.playerColor!][HOME_PATH_COORDINATES[cell.playerColor!].length-1][0] === cell.row && HOME_PATH_COORDINATES[cell.playerColor!][HOME_PATH_COORDINATES[cell.playerColor!].length-1][1] === cell.col) {
-      bgColor = 'bg-purple-400 dark:bg-purple-600'; // Final home destination
+  if (cell.type === 'homepath' && cell.playerColor && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][0] === cell.row && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][1] === cell.col) {
+      bgColor = 'bg-purple-500 dark:bg-purple-700'; 
+      textColor = 'text-white';
   }
 
 
@@ -78,10 +74,9 @@ const BoardCell: React.FC<{ cell: BoardCellType; children?: React.ReactNode; onC
     >
       {cell.type === 'track' && cell.isStart && <Star className="w-1/2 h-1/2 opacity-50" />}
       {cell.type === 'track' && cell.isSafe && !cell.isStart && <Zap className="w-1/2 h-1/2 opacity-30" />}
-      {cell.type === 'homepath' && HOME_PATH_COORDINATES[cell.playerColor!][HOME_PATH_COORDINATES[cell.playerColor!].length-1][0] === cell.row && HOME_PATH_COORDINATES[cell.playerColor!][HOME_PATH_COORDINATES[cell.playerColor!].length-1][1] === cell.col && (
+      {cell.type === 'homepath' && cell.playerColor && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][0] === cell.row && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][1] === cell.col && (
         <Home className="w-3/4 h-3/4 opacity-70"/>
       )}
-      {/* Render multiple tokens in a cell if needed */}
       <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-0.5 p-0.5">
          {children}
       </div>
@@ -90,7 +85,7 @@ const BoardCell: React.FC<{ cell: BoardCellType; children?: React.ReactNode; onC
 };
 
 
-const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, highlightedMoves, currentPlayer, onMoveSelect, gameStatus }) => {
+const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, highlightedMoves, currentPlayer, onMoveSelect, gameStatus, humanPlayerColor }) => {
   
   const getCellForToken = (token: Token): { row: number; col: number } => {
     if (token.status === 'base') {
@@ -101,14 +96,12 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
       return { row: TRACK_COORDINATES[trackPos][0], col: TRACK_COORDINATES[trackPos][1] };
     }
     if (token.status === 'home') {
-      // Ensure position is within bounds for home path
       const homePos = Math.min(token.position, HOME_PATH_COORDINATES[token.player].length - 1);
       return { row: HOME_PATH_COORDINATES[token.player][homePos][0], col: HOME_PATH_COORDINATES[token.player][homePos][1] };
     }
-    return { row: -1, col: -1 }; // Should not happen
+    return { row: -1, col: -1 }; 
   };
 
-  // Group tokens by their cell coordinates
   const tokensByCell: Record<string, Token[]> = {};
   tokens.forEach(token => {
     const { row, col } = getCellForToken(token);
@@ -128,7 +121,10 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
         
         const isHighlightedMoveTarget = highlightedMoves.find(move => {
           if (move.newStatus === 'track') return TRACK_COORDINATES[move.newPosition][0] === cellDef.row && TRACK_COORDINATES[move.newPosition][1] === cellDef.col;
-          if (move.newStatus === 'home') return HOME_PATH_COORDINATES[currentPlayer][move.newPosition][0] === cellDef.row && HOME_PATH_COORDINATES[currentPlayer][move.newPosition][1] === cellDef.col;
+          // Make sure 'currentPlayer' in highlightedMoves check is indeed the player whose token is moving.
+          // For 'home' moves, the newPosition is relative to the token's player's home path.
+          const movingToken = tokens.find(t => t.id === move.tokenId);
+          if (movingToken && move.newStatus === 'home') return HOME_PATH_COORDINATES[movingToken.player][move.newPosition][0] === cellDef.row && HOME_PATH_COORDINATES[movingToken.player][move.newPosition][1] === cellDef.col;
           return false;
         });
 
@@ -143,7 +139,8 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
                 onClick={() => onTokenSelect(token)}
                 isSelected={token.id === selectedTokenId}
                 isCurrentPlayerToken={token.player === currentPlayer && gameStatus === 'SELECT_TOKEN'}
-                relativeIndex={tokenIndex} // For staggering multiple tokens in a cell
+                isHumanPlayerToken={token.player === humanPlayerColor}
+                relativeIndex={tokenIndex} 
                 totalInCell={tokensInCell.length}
               />
             ))}
@@ -155,3 +152,4 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
 };
 
 export default Board;
+
