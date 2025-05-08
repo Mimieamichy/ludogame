@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -14,7 +13,7 @@ import {
   PLAYER_START_OFFSETS,
   SAFE_SQUARE_INDICES
 } from '@/lib/ludo-constants';
-import { calculateTokenPathPosition } from '@/lib/ludo-logic';
+import { calculateGlobalTrackPosition } from '@/lib/ludo-logic';
 import TokenPiece from './TokenPiece'; // Renamed from Token.tsx to avoid conflict
 import { cn } from '@/lib/utils';
 import { Home, Star, Zap } from 'lucide-react';
@@ -98,7 +97,7 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
       return { row: BASE_TOKEN_POSITIONS[token.player][token.position][0], col: BASE_TOKEN_POSITIONS[token.player][token.position][1] };
     }
     if (token.status === 'track') {
-      const trackPos = calculateTokenPathPosition(token);
+      const trackPos = calculateGlobalTrackPosition(token);
       return { row: TRACK_COORDINATES[trackPos][0], col: TRACK_COORDINATES[trackPos][1] };
     }
     if (token.status === 'home') {

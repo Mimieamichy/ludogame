@@ -3,27 +3,24 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { GameState, Token, ValidMove, PlayerColor } from '@/types/ludo';
-import { INITIAL_GAME_STATE, PLAYER_NAMES, ACTIVE_PLAYER_COLORS } from '@/lib/ludo-constants';
+import { INITIAL_GAME_STATE, PLAYER_NAMES, ACTIVE_PLAYER_COLORS, PLAYER_TAILWIND_COLORS } from '@/lib/ludo-constants';
 import { rollDice, applyMove, getAllPossibleMoves, playerHasAnyMoves, passTurn } from '@/lib/ludo-logic';
 import Board from './Board';
 import Dice from './Dice';
 import PlayerPanel from './PlayerPanel';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { LucideAlertTriangle } from 'lucide-react';
+import { LucideAlertTriangle, RotateCcw } from 'lucide-react';
 
 export default function LudoGame() {
   const [gameState, setGameState] = useState<GameState>(INITIAL_GAME_STATE());
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
-  const [validMovesForSelectedToken, setValidMovesForSelectedToken] = useState<ValidMove[]>([]);
   const [highlightedMoves, setHighlightedMoves] = useState<ValidMove[]>([]);
   const [showPassButton, setShowPassButton] = useState(false);
 
 
   useEffect(() => {
     if (gameState.gameStatus === 'START_GAME') {
-        // Could add a "Start Game" button here if needed
-        // For now, auto-transitions to first player's turn
         setGameState(prev => ({...prev, gameStatus: 'ROLL_DICE'}));
     }
   }, [gameState.gameStatus]);
@@ -31,51 +28,73 @@ export default function LudoGame() {
   const handleDiceRoll = useCallback(() => {
     if (gameState.gameStatus !== 'ROLL_DICE' || gameState.diceRolledInTurn) return;
 
-    const diceResult = rollDice();
+    const diceResults = rollDice(); 
+    const isDoubles = diceResults[0] === diceResults[1];
     
     setGameState(prev => {
-      const newState = { ...prev, diceValue: diceResult, diceRolledInTurn: true, rolledSix: diceResult === 6 };
+      const newPendingDice = isDoubles ? 
+        [diceResults[0], diceResults[0], diceResults[0], diceResults[0]] : 
+        [diceResults[0], diceResults[1]];
+
+      const newState = { 
+        ...prev, 
+        diceValues: diceResults,
+        pendingDiceValues: newPendingDice,
+        rolledDoubles: isDoubles,
+        diceRolledInTurn: true 
+      };
       const hasMoves = playerHasAnyMoves(newState);
       
       if (hasMoves) {
-        return { ...newState, gameStatus: 'SELECT_TOKEN', message: `${PLAYER_NAMES[prev.currentPlayer]} rolled a ${diceResult}. Select a token to move.` };
+        return { ...newState, gameStatus: 'SELECT_TOKEN', message: `${PLAYER_NAMES[prev.currentPlayer]} rolled ${diceResults[0]} & ${diceResults[1]}. Select a token.` };
       } else {
         setShowPassButton(true);
-        return { ...newState, gameStatus: 'ROLL_DICE', message: `${PLAYER_NAMES[prev.currentPlayer]} rolled a ${diceResult}. No valid moves. Pass turn.` };
+        return { ...newState, gameStatus: 'ROLL_DICE', message: `${PLAYER_NAMES[prev.currentPlayer]} rolled ${diceResults[0]} & ${diceResults[1]}. No valid moves. Pass turn.` };
       }
     });
-  }, [gameState]);
+  }, [gameState.gameStatus, gameState.diceRolledInTurn]);
 
   const handleTokenSelect = useCallback((token: Token) => {
-    if (gameState.gameStatus !== 'SELECT_TOKEN' || token.player !== gameState.currentPlayer || !gameState.diceValue) {
+    if (gameState.gameStatus !== 'SELECT_TOKEN' || token.player !== gameState.currentPlayer || gameState.pendingDiceValues.length === 0) {
       setSelectedTokenId(null);
-      setValidMovesForSelectedToken([]);
       setHighlightedMoves([]);
       return;
     }
     
     setSelectedTokenId(token.id);
-    const moves = getAllPossibleMoves({ ...gameState }); // Ensure we pass current dice value
-    setValidMovesForSelectedToken(moves.filter(m => m.tokenId === token.id));
-    setHighlightedMoves(moves.filter(m => m.tokenId === token.id));
+    const allMovesForPlayer = getAllPossibleMoves({ ...gameState });
+    setHighlightedMoves(allMovesForPlayer.filter(m => m.tokenId === token.id));
 
   }, [gameState]);
   
   const handleMoveSelect = useCallback((move: ValidMove) => {
-    if (gameState.gameStatus !== 'SELECT_TOKEN' || !selectedTokenId || !validMovesForSelectedToken.find(m => m.newPosition === move.newPosition && m.newStatus === move.newStatus)) {
-      return;
+    if (gameState.gameStatus !== 'SELECT_TOKEN' || !selectedTokenId || !highlightedMoves.some(hm => 
+        hm.tokenId === move.tokenId && 
+        hm.newPosition === move.newPosition && 
+        hm.newStatus === move.newStatus && 
+        hm.dieValueUsed === move.dieValueUsed
+    )) {
+        return;
     }
     
-    setGameState(prev => applyMove(prev, move));
-    setSelectedTokenId(null);
-    setValidMovesForSelectedToken([]);
-    setHighlightedMoves([]);
-    setShowPassButton(false);
-  }, [gameState, selectedTokenId, validMovesForSelectedToken]);
+    const nextGameState = applyMove(gameState, move);
+    setGameState(nextGameState);
+    setSelectedTokenId(null); 
+    
+    if (nextGameState.gameStatus === 'SELECT_TOKEN' && nextGameState.pendingDiceValues.length > 0) {
+        setHighlightedMoves(getAllPossibleMoves(nextGameState));
+    } else {
+        setHighlightedMoves([]);
+    }
+    setShowPassButton(false); 
+  }, [gameState, selectedTokenId, highlightedMoves]);
 
   const handlePassTurn = useCallback(() => {
-    if (showPassButton && gameState.gameStatus === 'ROLL_DICE' && gameState.diceRolledInTurn) {
+    if (showPassButton && ((gameState.gameStatus === 'ROLL_DICE' && gameState.diceRolledInTurn) || 
+                           (gameState.gameStatus === 'SELECT_TOKEN' && !playerHasAnyMoves(gameState))) ) {
         setGameState(prev => passTurn(prev));
+        setSelectedTokenId(null);
+        setHighlightedMoves([]);
         setShowPassButton(false);
     }
   }, [showPassButton, gameState]);
@@ -83,26 +102,49 @@ export default function LudoGame() {
   const handleResetGame = () => {
     setGameState(INITIAL_GAME_STATE());
     setSelectedTokenId(null);
-    setValidMovesForSelectedToken([]);
     setHighlightedMoves([]);
     setShowPassButton(false);
   };
 
   useEffect(() => {
-    // Auto-pass if dice rolled, in SELECT_TOKEN, but no moves available for any token
-    // This state should ideally be caught by playerHasAnyMoves after dice roll
-    if (gameState.gameStatus === 'SELECT_TOKEN' && gameState.diceValue && !playerHasAnyMoves(gameState)) {
-        setShowPassButton(true);
-        setGameState(prev => ({...prev, message: `${PLAYER_NAMES[prev.currentPlayer]} has no valid moves with a ${prev.diceValue}. Pass turn.`}));
+    if (gameState.gameStatus === 'SELECT_TOKEN' && gameState.pendingDiceValues.length > 0) {
+        const hasMoves = playerHasAnyMoves(gameState);
+        if (!hasMoves) {
+            setShowPassButton(true);
+            // Ensure message reflects the actual pending dice
+            const currentPendingDice = gameState.pendingDiceValues.length > 0 ? gameState.pendingDiceValues.join(', ') : "any dice";
+            setGameState(prev => ({
+                ...prev, 
+                message: `${PLAYER_NAMES[prev.currentPlayer]} has no valid moves with pending dice: ${currentPendingDice}. Pass turn.`
+            }));
+        } else {
+             setShowPassButton(false); // Has moves, so hide pass button
+            // Refresh highlighted moves based on current selection or all possible moves
+            const allPlayerMoves = getAllPossibleMoves(gameState);
+            if (selectedTokenId) {
+                 setHighlightedMoves(allPlayerMoves.filter(m => m.tokenId === selectedTokenId));
+            } else {
+                 setHighlightedMoves(allPlayerMoves); // Show all possible moves for current player
+            }
+        }
+    } else if (gameState.gameStatus !== 'SELECT_TOKEN') {
+        setHighlightedMoves([]); 
+        setSelectedTokenId(null); 
+        setShowPassButton(false); // Generally hide pass button outside select_token unless no moves from roll
     }
-  }, [gameState]);
+     // Special case: After rolling, if no moves, show pass button.
+    if (gameState.gameStatus === 'ROLL_DICE' && gameState.diceRolledInTurn && gameState.diceValues && !playerHasAnyMoves(gameState)) {
+        setShowPassButton(true);
+    }
+
+  }, [gameState, selectedTokenId]);
 
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-slate-100 to-stone-200 dark:from-slate-800 dark:to-stone-900">
+    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-slate-100 to-stone-200 dark:from-slate-800 dark:to-stone-900 text-foreground">
       <header className="mb-6 text-center">
         <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-500 to-red-500">
-          Ludo Master
+          Ludo Master Pro
         </h1>
       </header>
 
@@ -116,7 +158,23 @@ export default function LudoGame() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-8 w-full max-w-6xl">
+      <div className="grid grid-cols-1 md:grid-cols-[auto_1fr_auto] gap-6 w-full max-w-7xl items-start">
+        <div className="hidden md:flex flex-col items-center space-y-2 p-4 bg-card rounded-lg shadow-md self-start mt-[calc(5rem+24px)]"> {/* Approximate alignment with PlayerPanel */}
+             <h3 className="text-xl font-semibold text-muted-foreground mb-2">Players</h3>
+             {ACTIVE_PLAYER_COLORS.map(color => (
+                <div 
+                    key={color} 
+                    className={`p-2 rounded w-full text-center font-medium transition-all duration-300
+                        ${color === gameState.currentPlayer 
+                            ? `${PLAYER_TAILWIND_COLORS[color].bg} ${PLAYER_TAILWIND_COLORS[color].text === 'text-yellow-900' ? 'text-black' : 'text-white'} shadow-lg scale-105` 
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                >
+                    {PLAYER_NAMES[color]}
+                </div>
+             ))}
+        </div>
+        
         <div className="flex justify-center items-center">
           <Board
             tokens={gameState.tokens}
@@ -129,16 +187,18 @@ export default function LudoGame() {
           />
         </div>
 
-        <div className="flex flex-col items-center md:items-start space-y-6 p-6 bg-card rounded-xl shadow-xl">
+        <div className="flex flex-col items-center md:items-start space-y-6 p-6 bg-card rounded-xl shadow-xl self-start">
           <PlayerPanel
             currentPlayer={gameState.currentPlayer}
-            diceValue={gameState.diceValue}
+            diceValues={gameState.diceValues}
+            pendingDiceValues={gameState.pendingDiceValues}
             message={gameState.message}
             gameStatus={gameState.gameStatus}
           />
           
           <Dice
-            value={gameState.diceValue}
+            values={gameState.diceValues}
+            pendingDiceValues={gameState.pendingDiceValues}
             onRoll={handleDiceRoll}
             disabled={gameState.gameStatus !== 'ROLL_DICE' || gameState.diceRolledInTurn || gameState.gameStatus === 'GAME_OVER'}
           />
@@ -150,12 +210,13 @@ export default function LudoGame() {
           )}
           
           <Button onClick={handleResetGame} variant="destructive" className="w-full mt-auto">
+            <RotateCcw className="mr-2 h-5 w-5" />
             Reset Game
           </Button>
         </div>
       </div>
       <footer className="mt-8 text-sm text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} Ludo Master. Built with Next.js & Tailwind CSS.</p>
+        <p>&copy; {new Date().getFullYear()} Ludo Master Pro. Four Player - Two Dice Edition.</p>
       </footer>
     </div>
   );
