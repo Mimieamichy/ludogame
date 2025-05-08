@@ -3,9 +3,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { GameState, Token, ValidMove, PlayerColor } from '@/types/ludo';
-import { ACTIVE_PLAYER_COLORS } from '@/types/ludo'; // Import ACTIVE_PLAYER_COLORS from types
+import { ACTIVE_PLAYER_COLORS } from '@/types/ludo'; 
 import { INITIAL_GAME_STATE, PLAYER_NAMES, PLAYER_TAILWIND_COLORS } from '@/lib/ludo-constants';
-import { rollDice, applyMove, getAllPossibleMoves, playerHasAnyMoves, passTurn, getNextPlayer } from '@/lib/ludo-logic';
+import { rollDice, applyMove, getAllPossibleMoves, playerHasAnyMoves, passTurn } from '@/lib/ludo-logic';
 import Board from './Board';
 import Dice from './Dice';
 import PlayerPanel from './PlayerPanel';
@@ -24,8 +24,6 @@ export default function LudoGame() {
 
   useEffect(() => {
     if (gameState.gameStatus === 'START_GAME' && gameState.humanPlayerColor && gameState.aiPlayerColor) {
-        // Determine who starts. For simplicity, human can start or a random active player.
-        // Let's make the human player always start if they selected a color.
         setGameState(prev => ({
             ...prev, 
             gameStatus: 'ROLL_DICE',
@@ -39,20 +37,18 @@ export default function LudoGame() {
   const handleColorSelect = (color: PlayerColor) => {
     const aiColor = ACTIVE_PLAYER_COLORS.find(c => c !== color);
     if (!aiColor) {
-        // This should not happen if ACTIVE_PLAYER_COLORS has 2 elements
         console.error("Could not assign AI color");
-        // Fallback or error state
         setGameState(prev => ({...prev, message: "Error setting up AI player. Please reset."}));
         return;
     }
 
     setGameState(prev => ({
-        ...prev,
+        ...INITIAL_GAME_STATE(), // Reset game state first
         humanPlayerColor: color,
         aiPlayerColor: aiColor,
-        currentPlayer: color, // Human player starts
-        gameStatus: 'ROLL_DICE', // Transition to ROLL_DICE directly
-        message: `You are ${PLAYER_NAMES[color]}. Your AI opponent is ${PLAYER_NAMES[aiColor]}. Roll the dice to start!`
+        currentPlayer: color, 
+        gameStatus: 'ROLL_DICE', 
+        message: `You are ${PLAYER_NAMES[color]}. AI is ${PLAYER_NAMES[aiColor]}. Your turn, roll the dice!`
     }));
   };
 
@@ -68,7 +64,7 @@ export default function LudoGame() {
         [diceResults[0], diceResults[0], diceResults[0], diceResults[0]] : 
         [diceResults[0], diceResults[1]];
 
-      const newState = { 
+      let newState = { 
         ...prev, 
         diceValues: diceResults,
         pendingDiceValues: newPendingDice,
@@ -78,10 +74,11 @@ export default function LudoGame() {
       const hasMoves = playerHasAnyMoves(newState);
       
       if (hasMoves) {
-        return { ...newState, gameStatus: 'SELECT_TOKEN', message: `${PLAYER_NAMES[prev.currentPlayer]} rolled ${diceResults[0]} & ${diceResults[1]}. Select a token.` };
+        return { ...newState, gameStatus: 'SELECT_TOKEN', message: `You rolled ${diceResults[0]} & ${diceResults[1]}. Select a token.` };
       } else {
         setShowPassButton(true);
-        return { ...newState, gameStatus: 'ROLL_DICE', message: `${PLAYER_NAMES[prev.currentPlayer]} rolled ${diceResults[0]} & ${diceResults[1]}. No valid moves. Pass turn.` };
+        // Keep gameStatus as ROLL_DICE to allow passing, message updated by useEffect later if pass needed
+        return { ...newState, gameStatus: 'ROLL_DICE', message: `You rolled ${diceResults[0]} & ${diceResults[1]}. No valid moves. Pass turn.` };
       }
     });
   }, [gameState.gameStatus, gameState.diceRolledInTurn, gameState.humanPlayerColor, gameState.currentPlayer]);
@@ -114,7 +111,15 @@ export default function LudoGame() {
     setSelectedTokenId(null); 
     
     if (nextGameState.gameStatus === 'SELECT_TOKEN' && nextGameState.pendingDiceValues.length > 0) {
-        setHighlightedMoves(getAllPossibleMoves(nextGameState));
+        // Re-evaluate moves for the current player with remaining dice
+        const currentTokenIdIfStillSelected = nextGameState.tokens.find(t => t.id === selectedTokenId && t.player === nextGameState.currentPlayer) ? selectedTokenId : null;
+        
+        if(currentTokenIdIfStillSelected) {
+            const allPossible = getAllPossibleMoves(nextGameState);
+            setHighlightedMoves(allPossible.filter(m => m.tokenId === currentTokenIdIfStillSelected));
+        } else {
+            setHighlightedMoves(getAllPossibleMoves(nextGameState)); // Or empty if no token should be auto-selected
+        }
     } else {
         setHighlightedMoves([]);
     }
@@ -123,8 +128,14 @@ export default function LudoGame() {
 
   const handlePassTurn = useCallback(() => {
     if (gameState.currentPlayer !== gameState.humanPlayerColor) return; 
-    if (showPassButton && ((gameState.gameStatus === 'ROLL_DICE' && gameState.diceRolledInTurn) || 
-                           (gameState.gameStatus === 'SELECT_TOKEN' && !playerHasAnyMoves(gameState))) ) {
+    // Allow passing if:
+    // 1. Dice rolled, status is ROLL_DICE (meaning no moves were found immediately after roll)
+    // 2. Status is SELECT_TOKEN, but no moves are actually possible with current pending dice
+    if (showPassButton && 
+        ( (gameState.gameStatus === 'ROLL_DICE' && gameState.diceRolledInTurn) || 
+          (gameState.gameStatus === 'SELECT_TOKEN' && !playerHasAnyMoves(gameState)) 
+        )
+       ) {
         setGameState(prev => passTurn(prev));
         setSelectedTokenId(null);
         setHighlightedMoves([]);
@@ -148,72 +159,120 @@ export default function LudoGame() {
                 const isDoubles = diceResults[0] === diceResults[1];
                 setGameState(prev => {
                     const newPendingDice = isDoubles ? [diceResults[0], diceResults[0], diceResults[0], diceResults[0]] : [diceResults[0], diceResults[1]];
-                    const newState = { ...prev, diceValues: diceResults, pendingDiceValues: newPendingDice, rolledDoubles: isDoubles, diceRolledInTurn: true };
+                    let newState = { ...prev, diceValues: diceResults, pendingDiceValues: newPendingDice, rolledDoubles: isDoubles, diceRolledInTurn: true };
                     const hasMoves = playerHasAnyMoves(newState);
                     if (hasMoves) {
-                        return { ...newState, gameStatus: 'SELECT_TOKEN', message: `AI (${PLAYER_NAMES[prev.currentPlayer]}) rolled ${diceResults[0]} & ${diceResults[1]}. AI is thinking...` };
+                        return { ...newState, gameStatus: 'SELECT_TOKEN', message: `AI (${PLAYER_NAMES[prev.currentPlayer!]}) rolled ${diceResults[0]} & ${diceResults[1]}. AI is thinking...` };
                     } else {
-                        return passTurn({...newState, message: `AI (${PLAYER_NAMES[prev.currentPlayer]}) rolled ${diceResults[0]} & ${diceResults[1]}. No moves. Passing.`});
+                         // If AI has no moves after rolling, pass turn
+                        return passTurn({...newState, message: `AI (${PLAYER_NAMES[prev.currentPlayer!]}) rolled ${diceResults[0]} & ${diceResults[1]}. No moves. Passing.`});
                     }
                 });
             } else if (gameState.gameStatus === 'SELECT_TOKEN') {
                 const possibleMoves = getAllPossibleMoves(gameState);
                 if (possibleMoves.length > 0) {
                     // Basic AI: Prefer moves that capture or move out of base, or move furthest
-                    let bestMove = possibleMoves[0];
+                    let bestMove = possibleMoves[0]; // Default to the first valid move
+                    // Simple AI strategy:
+                    // 1. Capture if possible
+                    // 2. Move token out of base if possible (especially with a 6)
+                    // 3. Move token furthest on track
+                    // 4. Move token into home path
+                    // 5. Move token within home path (closest to home)
+                    let priorityMove: ValidMove | null = null;
+
                     for (const move of possibleMoves) {
-                        if (move.captureTargetId) { bestMove = move; break; } // Prioritize capture
-                        const token = gameState.tokens.find(t => t.id === move.tokenId);
-                        if (token?.status === 'base' && move.newStatus === 'track') { bestMove = move; } // Prioritize moving out
-                        else if (move.newPathProgress > bestMove.newPathProgress) { bestMove = move; } // Prefer moving further
+                        const tokenBeingMoved = gameState.tokens.find(t => t.id === move.tokenId)!;
+                        if (move.captureTargetId) { priorityMove = move; break; } // Highest priority: capture
+                        if (tokenBeingMoved.status === 'base' && move.newStatus === 'track') { // Second: move out of base
+                            if (!priorityMove || priorityMove.newStatus !== 'track') priorityMove = move;
+                        }
+                    }
+                    if (priorityMove) {
+                        bestMove = priorityMove;
+                    } else { // If no capture or move-out, pick a "good" move
+                        possibleMoves.sort((a, b) => {
+                            const tokenA = gameState.tokens.find(t => t.id === a.tokenId)!;
+                            const tokenB = gameState.tokens.find(t => t.id === b.tokenId)!;
+
+                            // Prefer moving into home over staying on track
+                            if (a.newStatus === 'home' && b.newStatus === 'track') return -1;
+                            if (b.newStatus === 'home' && a.newStatus === 'track') return 1;
+
+                            // If both moving into/within home, prefer closer to final spot
+                            if (a.newStatus === 'home' && b.newStatus === 'home') {
+                                return b.newPosition - a.newPosition; // Higher position (closer to end) is better
+                            }
+                            // If both on track, prefer moving further
+                            if (a.newStatus === 'track' && b.newStatus === 'track') {
+                                return b.newPathProgress - a.newPathProgress;
+                            }
+                            return 0;
+                        });
+                        bestMove = possibleMoves[0];
                     }
                     setGameState(applyMove(gameState, bestMove));
-                } else {
+                } else { // No possible moves for AI with current dice
                      setGameState(passTurn(gameState));
                 }
             }
-        }, 1500); 
+        }, 1500 + Math.random() * 1000); // Add some variability to AI thinking time
 
         return () => clearTimeout(aiActionTimeout);
     }
 
 
     // UI updates for human player
-    if (gameState.gameStatus === 'SELECT_TOKEN' && gameState.pendingDiceValues.length > 0 && gameState.currentPlayer === gameState.humanPlayerColor) {
-        const hasMoves = playerHasAnyMoves(gameState);
-        if (!hasMoves) {
+    if (gameState.currentPlayer === gameState.humanPlayerColor) {
+        if (gameState.gameStatus === 'SELECT_TOKEN' && gameState.pendingDiceValues.length > 0) {
+            const hasMoves = playerHasAnyMoves(gameState);
+            if (!hasMoves) {
+                setShowPassButton(true);
+                const currentPendingDice = gameState.pendingDiceValues.length > 0 ? gameState.pendingDiceValues.join(' & ') : "any dice";
+                setGameState(prev => ({
+                    ...prev, 
+                    message: `You have no valid moves with pending dice: ${currentPendingDice}. Pass turn.`
+                }));
+            } else {
+                 setShowPassButton(false); 
+                const allPlayerMoves = getAllPossibleMoves(gameState);
+                if (selectedTokenId) {
+                     const movesForSelected = allPlayerMoves.filter(m => m.tokenId === selectedTokenId);
+                     setHighlightedMoves(movesForSelected);
+                     if(movesForSelected.length === 0 && allPlayerMoves.length > 0) {
+                         // Selected token has no moves with current dice, but other tokens might.
+                         // Clear selection to allow player to pick another token, or show pass if no other token has moves.
+                         setSelectedTokenId(null); 
+                         // No, don't set highlighted to allPlayerMoves, player must explicitly select another.
+                         // If they can't, the !hasMoves above will catch it for overall pass.
+                     }
+                } else {
+                     setHighlightedMoves([]); 
+                }
+            }
+        } else if (gameState.gameStatus === 'ROLL_DICE' && gameState.diceRolledInTurn && !playerHasAnyMoves(gameState)) {
+            // This covers the case where dice are rolled, but no moves are found immediately
             setShowPassButton(true);
-            const currentPendingDice = gameState.pendingDiceValues.length > 0 ? gameState.pendingDiceValues.join(', ') : "any dice";
             setGameState(prev => ({
                 ...prev, 
-                message: `${PLAYER_NAMES[prev.currentPlayer]} has no valid moves with pending dice: ${currentPendingDice}. Pass turn.`
+                message: `You rolled ${prev.diceValues ? prev.diceValues.join(' & ') : ''}. No valid moves. Pass turn.`
             }));
-        } else {
-             setShowPassButton(false); 
-            const allPlayerMoves = getAllPossibleMoves(gameState);
-            if (selectedTokenId) {
-                 setHighlightedMoves(allPlayerMoves.filter(m => m.tokenId === selectedTokenId));
-            } else {
-                 // If no token selected, highlight all possible moves for the player to see options
-                 // This can be noisy, consider only highlighting when a token is selected or not at all before selection.
-                 // For now, let's keep it simple and not pre-highlight all moves.
-                 setHighlightedMoves([]); // Or set to allPlayerMoves if desired.
-            }
+        } else if (gameState.gameStatus !== 'SELECT_TOKEN') { // e.g. back to ROLL_DICE or GAME_OVER
+            setHighlightedMoves([]); 
+            setSelectedTokenId(null); 
+            setShowPassButton(false); 
         }
-    } else if (gameState.gameStatus !== 'SELECT_TOKEN') {
-        setHighlightedMoves([]); 
-        setSelectedTokenId(null); 
-        setShowPassButton(false); 
+    } else { // AI's turn or game over/color selection
+        setHighlightedMoves([]);
+        setSelectedTokenId(null);
+        setShowPassButton(false);
     }
     
-    if (gameState.gameStatus === 'ROLL_DICE' && gameState.diceRolledInTurn && gameState.diceValues && !playerHasAnyMoves(gameState) && gameState.currentPlayer === gameState.humanPlayerColor) {
-        setShowPassButton(true);
-    }
 
   }, [gameState, selectedTokenId]);
 
 
-  if (gameState.gameStatus === 'COLOR_SELECTION') {
+  if (gameState.gameStatus === 'COLOR_SELECTION' || !gameState.humanPlayerColor) {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-slate-100 to-stone-200 dark:from-slate-800 dark:to-stone-900 text-foreground">
             <Card className="w-full max-w-md shadow-2xl">
@@ -237,7 +296,7 @@ export default function LudoGame() {
                                 `hover:${PLAYER_TAILWIND_COLORS[color].bg}/90`
                             )}
                         >
-                            {PLAYER_NAMES[color].split('(')[1].replace(')','')}
+                            {PLAYER_NAMES[color].split('(')[1].replace(')','')} {/* Extracts color name e.g. "Red" */}
                         </Button>
                     ))}
                 </CardContent>
@@ -262,7 +321,7 @@ export default function LudoGame() {
           <AlertTitle className="font-bold text-green-800 dark:text-green-300">Game Over!</AlertTitle>
           <AlertDescription className="text-green-700 dark:text-green-400">
             {PLAYER_NAMES[gameState.winner]} wins! Congratulations!
-            {gameState.winner !== gameState.humanPlayerColor && " (AI)"}
+            {gameState.winner !== gameState.humanPlayerColor && gameState.winner === gameState.aiPlayerColor && " (AI)"}
           </AlertDescription>
         </Alert>
       )}
@@ -316,7 +375,7 @@ export default function LudoGame() {
           />
 
           {showPassButton && gameState.currentPlayer === gameState.humanPlayerColor && (
-             <Button onClick={handlePassTurn} variant="outline" className="w-full" disabled={gameState.gameStatus === 'GAME_OVER'}>
+             <Button onClick={handlePassTurn} variant="outline" className="w-full" disabled={gameState.gameStatus === 'GAME_OVER' || !(gameState.gameStatus === 'ROLL_DICE' && gameState.diceRolledInTurn && !playerHasAnyMoves(gameState)) && !(gameState.gameStatus === 'SELECT_TOKEN' && !playerHasAnyMoves(gameState))  }>
                 Pass Turn
             </Button>
           )}
