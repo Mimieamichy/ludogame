@@ -1,5 +1,6 @@
 
 import type { GameState, Token, PlayerColor, ValidMove } from '@/types/ludo';
+import { ACTIVE_PLAYER_COLORS } from '@/types/ludo'; // Import ACTIVE_PLAYER_COLORS from types
 import {
   PLAYER_START_OFFSETS,
   PLAYER_HOME_ENTRY_POINTS,
@@ -11,7 +12,6 @@ import {
   ROLL_SIX_GETS_ANOTHER_TURN,
   CAPTURE_SENDS_TO_BASE,
   HOME_ENTRY_EXACT_ROLL_REQUIRED,
-  ACTIVE_PLAYER_COLORS,
   PLAYER_NAMES,
 } from './ludo-constants';
 
@@ -76,8 +76,7 @@ export function getValidMoves(state: GameState, tokenId: string): ValidMove[] {
       // More precisely, if current position + dice crosses playerHomeEntry
       // Simplified: if newPathProgress would put it past the point it should enter home.
       // The pathProgress for home entry is relative to the player's start.
-      // A token completes 51 squares from its start to enter home.
-      // This means pathProgress will be 51 when it enters its home path.
+      // A token completes 51 squares from its start to enter its home path.
       
       const squaresToHomeEntry = (playerHomeEntry - currentTrackPos + TRACK_LENGTH) % TRACK_LENGTH;
       
@@ -263,3 +262,4 @@ export function playerHasAnyMoves(state: GameState): boolean {
   }
   return false;
 }
+
