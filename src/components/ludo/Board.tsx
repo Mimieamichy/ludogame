@@ -9,6 +9,8 @@ import {
   TRACK_COORDINATES, 
   HOME_PATH_COORDINATES,
   BOARD_CELLS,
+  PLAYER_START_OFFSETS, // Import PLAYER_START_OFFSETS
+  TRACK_LENGTH, // Import TRACK_LENGTH for modulo operation
 } from '@/lib/ludo-constants';
 import { calculateGlobalTrackPosition } from '@/lib/ludo-logic';
 import TokenPiece from './TokenPiece';
@@ -86,24 +88,21 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
   
   const getCellForToken = (token: Token): { row: number; col: number } => {
     if (token.status === 'base') {
-      // Ensure BASE_TOKEN_POSITIONS has entry for the token's player.
       if (!BASE_TOKEN_POSITIONS[token.player]) {
-        // This can happen if a player color is used that is not in ACTIVE_PLAYER_COLORS and thus doesn't have base positions defined for it.
-        // console.warn(`No base positions for player ${token.player}. This might happen if player is not in ACTIVE_PLAYER_COLORS.`);
-        return {row: -1, col: -1}; // Or handle error appropriately
+        return {row: -1, col: -1}; 
       }
       return { row: BASE_TOKEN_POSITIONS[token.player][token.position][0], col: BASE_TOKEN_POSITIONS[token.player][token.position][1] };
     }
     if (token.status === 'track') {
-      const trackPos = calculateGlobalTrackPosition(token);
+      const trackPos = calculateGlobalTrackPosition(token); // This uses token.pathProgress and token.player's start offset
+      if (trackPos === -1 || trackPos >= TRACK_COORDINATES.length) return {row: -1, col: -1}; // Safety check
       return { row: TRACK_COORDINATES[trackPos][0], col: TRACK_COORDINATES[trackPos][1] };
     }
     if (token.status === 'home') {
-       // Ensure HOME_PATH_COORDINATES has entry for the token's player.
       if (!HOME_PATH_COORDINATES[token.player]) {
-        // console.warn(`No home path for player ${token.player}.`);
         return {row: -1, col: -1}; 
       }
+      // token.position for 'home' status is the 0-indexed step into the home column.
       const homePos = Math.min(token.position, HOME_PATH_COORDINATES[token.player].length - 1);
       return { row: HOME_PATH_COORDINATES[token.player][homePos][0], col: HOME_PATH_COORDINATES[token.player][homePos][1] };
     }
@@ -113,7 +112,7 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
   const tokensByCell: Record<string, Token[]> = {};
   tokens.forEach(token => {
     const { row, col } = getCellForToken(token);
-    if (row === -1 && col === -1) return; // Skip tokens that couldn't be placed
+    if (row === -1 && col === -1) return; 
     const key = `${row}-${col}`;
     if (!tokensByCell[key]) {
       tokensByCell[key] = [];
@@ -129,10 +128,28 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
         const tokensInCell = tokensByCell[cellKey] || [];
         
         const isHighlightedMoveTarget = highlightedMoves.find(move => {
-          if (move.newStatus === 'track') return TRACK_COORDINATES[move.newPosition][0] === cellDef.row && TRACK_COORDINATES[move.newPosition][1] === cellDef.col;
           const movingToken = tokens.find(t => t.id === move.tokenId);
-          // Ensure HOME_PATH_COORDINATES[movingToken.player] exists before accessing it.
-          if (movingToken && HOME_PATH_COORDINATES[movingToken.player] && move.newStatus === 'home') return HOME_PATH_COORDINATES[movingToken.player][move.newPosition][0] === cellDef.row && HOME_PATH_COORDINATES[movingToken.player][move.newPosition][1] === cellDef.col;
+          if (!movingToken) return false;
+
+          if (move.newStatus === 'track') {
+            // move.newPosition for 'track' is the pathProgress from the player's start
+            // We need to convert this to a global track position
+            const playerStartOffset = PLAYER_START_OFFSETS[movingToken.player];
+            const globalTargetTrackPos = (playerStartOffset + move.newPosition) % TRACK_LENGTH;
+            if (globalTargetTrackPos >= TRACK_COORDINATES.length) return false; // Safety check
+            return TRACK_COORDINATES[globalTargetTrackPos][0] === cellDef.row && TRACK_COORDINATES[globalTargetTrackPos][1] === cellDef.col;
+          }
+          
+          if (move.newStatus === 'home') {
+            // move.newPosition for 'home' is the 0-indexed step into the home column
+            if (!HOME_PATH_COORDINATES[movingToken.player] || move.newPosition >= HOME_PATH_COORDINATES[movingToken.player].length) return false;
+            return HOME_PATH_COORDINATES[movingToken.player][move.newPosition][0] === cellDef.row && HOME_PATH_COORDINATES[movingToken.player][move.newPosition][1] === cellDef.col;
+          }
+          // If moving to base (e.g. from a rule not yet implemented, or future enhancement)
+          if (move.newStatus === 'base') {
+              if (!BASE_TOKEN_POSITIONS[movingToken.player] || move.newPosition >= BASE_TOKEN_POSITIONS[movingToken.player].length) return false;
+              return BASE_TOKEN_POSITIONS[movingToken.player][move.newPosition][0] === cellDef.row && BASE_TOKEN_POSITIONS[movingToken.player][move.newPosition][1] === cellDef.col;
+          }
           return false;
         });
 
