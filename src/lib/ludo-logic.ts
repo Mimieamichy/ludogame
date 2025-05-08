@@ -1,5 +1,6 @@
 
 import type { GameState, Token, PlayerColor, ValidMove } from '@/types/ludo';
+import { ACTIVE_PLAYER_COLORS } from '@/types/ludo'; // Import directly from types
 import {
   PLAYER_START_OFFSETS,
   PLAYER_HOME_ENTRY_POINTS,
@@ -12,7 +13,7 @@ import {
   CAPTURE_SENDS_TO_BASE,
   HOME_ENTRY_EXACT_ROLL_REQUIRED,
   PLAYER_NAMES,
-  ACTIVE_PLAYER_COLORS, 
+  // ACTIVE_PLAYER_COLORS is now imported from @/types/ludo
 } from './ludo-constants';
 
 export function rollDice(): [number, number] {
@@ -53,9 +54,13 @@ export function getValidMovesForDie(state: GameState, tokenId: string, dieValue:
       const startGlobalPos = playerStartOffset;
       let captureTargetId: string | undefined = undefined;
 
+      // Check for captures only against active AI player's tokens if AI player exists
+      const opponentPlayer = state.aiPlayerColor && state.aiPlayerColor !== tokenToMove.player ? state.aiPlayerColor : null;
+
       state.tokens.forEach(otherToken => {
         if (
           otherToken.player !== tokenToMove.player &&
+          (opponentPlayer === null || otherToken.player === opponentPlayer) && // Only consider opponent if defined
           otherToken.status === 'track' &&
           calculateGlobalTrackPosition(otherToken) === startGlobalPos &&
           !SAFE_SQUARE_INDICES.includes(startGlobalPos)
@@ -78,19 +83,17 @@ export function getValidMovesForDie(state: GameState, tokenId: string, dieValue:
     const newProposedPathProgress = currentPathProgress + dieValue;
 
     // Check if moving into home column.
-    // A player needs to complete TRACK_LENGTH steps from their start to *enter* the home column.
-    // pathProgress TRACK_LENGTH means it has landed on the square *after* its home entry point, i.e., first step in home column.
     if (currentPathProgress < TRACK_LENGTH && newProposedPathProgress >= TRACK_LENGTH) {
         const stepsIntoHomeColumn = newProposedPathProgress - TRACK_LENGTH;
-        if (stepsIntoHomeColumn < HOME_COLUMN_LENGTH -1) { // Moving within home path (0-4)
+        if (stepsIntoHomeColumn < HOME_COLUMN_LENGTH -1) { 
              validMoves.push({
                 tokenId: tokenToMove.id,
-                newPosition: stepsIntoHomeColumn, // For 'home' status, position is index in home column (0-5)
+                newPosition: stepsIntoHomeColumn, 
                 newStatus: 'home',
                 newPathProgress: newProposedPathProgress, 
                 dieValueUsed: dieValue,
              });
-        } else if (stepsIntoHomeColumn === HOME_COLUMN_LENGTH - 1) { // Reached exact final home spot (index 5)
+        } else if (stepsIntoHomeColumn === HOME_COLUMN_LENGTH - 1) { 
              validMoves.push({
                 tokenId: tokenToMove.id,
                 newPosition: stepsIntoHomeColumn, 
@@ -98,15 +101,17 @@ export function getValidMovesForDie(state: GameState, tokenId: string, dieValue:
                 newPathProgress: newProposedPathProgress,
                 dieValueUsed: dieValue,
             });
-        } // If exact roll required and it overshoots final spot, it's not a valid move for home.
-          // If HOME_ENTRY_EXACT_ROLL_REQUIRED is false, overshooting means it just goes to the last spot. (Not implemented here for simplicity)
-    } else if (newProposedPathProgress < TRACK_LENGTH) { // Stays on main track
+        } 
+    } else if (newProposedPathProgress < TRACK_LENGTH) { 
         const newGlobalTrackPos = (playerStartOffset + newProposedPathProgress) % TRACK_LENGTH;
         let captureTargetId: string | undefined = undefined;
         
+        const opponentPlayer = state.aiPlayerColor && state.aiPlayerColor !== tokenToMove.player ? state.aiPlayerColor : null;
+
         state.tokens.forEach(otherToken => {
             if (
                 otherToken.player !== tokenToMove.player &&
+                (opponentPlayer === null || otherToken.player === opponentPlayer) &&
                 otherToken.status === 'track' &&
                 calculateGlobalTrackPosition(otherToken) === newGlobalTrackPos &&
                 !SAFE_SQUARE_INDICES.includes(newGlobalTrackPos)
@@ -117,19 +122,19 @@ export function getValidMovesForDie(state: GameState, tokenId: string, dieValue:
 
         validMoves.push({
             tokenId: tokenToMove.id,
-            newPosition: newProposedPathProgress, // For 'track' status, position is pathProgress
+            newPosition: newProposedPathProgress, 
             newStatus: 'track',
             newPathProgress: newProposedPathProgress,
             captureTargetId,
             dieValueUsed: dieValue,
         });
-    } // If newProposedPathProgress >= TRACK_LENGTH but doesn't land validly in home, it's not a move.
+    } 
 
   } else if (tokenToMove.status === 'home') {
-    const currentHomePos = tokenToMove.position; // This is 0-4 for path, 5 for final spot
+    const currentHomePos = tokenToMove.position; 
     const newHomePos = currentHomePos + dieValue;
 
-    if (newHomePos < HOME_COLUMN_LENGTH - 1) { // Moving within home path (0-4)
+    if (newHomePos < HOME_COLUMN_LENGTH - 1) { 
       validMoves.push({
         tokenId: tokenToMove.id,
         newPosition: newHomePos,
@@ -137,7 +142,7 @@ export function getValidMovesForDie(state: GameState, tokenId: string, dieValue:
         newPathProgress: tokenToMove.pathProgress + dieValue, 
         dieValueUsed: dieValue,
       });
-    } else if (newHomePos === HOME_COLUMN_LENGTH - 1) { // Arrived at final home spot (index 5)
+    } else if (newHomePos === HOME_COLUMN_LENGTH - 1) { 
        validMoves.push({
         tokenId: tokenToMove.id,
         newPosition: newHomePos, 
@@ -146,12 +151,11 @@ export function getValidMovesForDie(state: GameState, tokenId: string, dieValue:
         dieValueUsed: dieValue,
       });
     } else if (!HOME_ENTRY_EXACT_ROLL_REQUIRED && newHomePos > HOME_COLUMN_LENGTH -1) {
-        // If exact roll not required, and overshot, counts as landing home (not standard, but for completion)
         validMoves.push({
             tokenId: tokenToMove.id,
             newPosition: HOME_COLUMN_LENGTH - 1, 
             newStatus: 'home',
-            newPathProgress: tokenToMove.pathProgress + dieValue, // pathProgress still accumulates
+            newPathProgress: tokenToMove.pathProgress + dieValue, 
             dieValueUsed: dieValue,
         });
     }
@@ -164,13 +168,13 @@ export function getAllPossibleMoves(state: GameState): ValidMove[] {
   if (state.pendingDiceValues.length === 0 || state.gameStatus !== 'SELECT_TOKEN') return [];
   
   let allMoves: ValidMove[] = [];
-  const uniquePendingDice = Array.from(new Set(state.pendingDiceValues)); // Use unique dice if player can choose
+  const uniquePendingDice = Array.from(new Set(state.pendingDiceValues)); 
 
   state.tokens
     .filter(token => token.player === state.currentPlayer && 
                      (token.status !== 'home' || token.position < HOME_COLUMN_LENGTH - 1))
     .forEach(token => {
-      uniquePendingDice.forEach(dieValue => { // Generate moves for each unique pending die value
+      uniquePendingDice.forEach(dieValue => { 
         allMoves.push(...getValidMovesForDie(state, token.id, dieValue));
       });
     });
@@ -184,14 +188,13 @@ export function applyMove(currentState: GameState, move: ValidMove): GameState {
   if (movedTokenIndex === -1) return currentState; 
 
   newState.tokens[movedTokenIndex].status = move.newStatus;
-  newState.tokens[movedTokenIndex].position = move.newPosition; // This is now correctly the new 'position' field value
+  newState.tokens[movedTokenIndex].position = move.newPosition; 
   newState.tokens[movedTokenIndex].pathProgress = move.newPathProgress;
 
   const dieValueIndex = newState.pendingDiceValues.indexOf(move.dieValueUsed);
   if (dieValueIndex > -1) {
     newState.pendingDiceValues.splice(dieValueIndex, 1);
   } else if (newState.rolledDoubles && newState.pendingDiceValues.includes(move.dieValueUsed)) {
-    // If it was doubles, all pending values are the same. Remove one.
      const firstInstanceOfDouble = newState.pendingDiceValues.findIndex(d => d === move.dieValueUsed);
      if (firstInstanceOfDouble > -1) newState.pendingDiceValues.splice(firstInstanceOfDouble, 1);
   }
@@ -210,9 +213,8 @@ export function applyMove(currentState: GameState, move: ValidMove): GameState {
         newBasePos++;
       }
       newState.tokens[capturedTokenIndex].position = newBasePos;
-      newState.tokens[capturedTokenIndex].pathProgress = -1; // Reset path progress
+      newState.tokens[capturedTokenIndex].pathProgress = -1; 
       newState.message = `${PLAYER_NAMES[newState.tokens[movedTokenIndex].player]} captured ${PLAYER_NAMES[capturedPlayer]}'s token with a ${move.dieValueUsed}!`;
-       // If capture gives another turn (common house rule, not implemented here by default)
     }
   } else {
     newState.message = `${PLAYER_NAMES[newState.tokens[movedTokenIndex].player]} moved a token with a ${move.dieValueUsed}.`;
@@ -233,7 +235,6 @@ export function applyMove(currentState: GameState, move: ValidMove): GameState {
         newState.gameStatus = 'SELECT_TOKEN';
         newState.message += ` Play remaining die/dice: ${newState.pendingDiceValues.join(', ')}.`;
       } else {
-        // No more moves with remaining dice, pass turn effects
         if (newState.rolledDoubles && ROLL_DOUBLES_GETS_ANOTHER_TURN) {
              newState.gameStatus = 'ROLL_DICE';
              newState.diceValues = null; 
@@ -255,8 +256,6 @@ export function applyMove(currentState: GameState, move: ValidMove): GameState {
       newState.gameStatus = 'ROLL_DICE';
       newState.diceValues = null; 
       newState.pendingDiceValues = [];
-      // Note: `rolledDoubles` might be used for 3 consecutive doubles rule later.
-      // For now, it just grants another turn.
       newState.diceRolledInTurn = false; 
       newState.message += ` Rolled doubles, roll again!`;
     } else {
@@ -275,12 +274,10 @@ export function applyMove(currentState: GameState, move: ValidMove): GameState {
 
 export function passTurn(currentState: GameState): GameState {
     const newState = JSON.parse(JSON.stringify(currentState)) as GameState;
-    // If passing because of no moves after a roll, and that roll was doubles, player might still get another turn.
-    if (newState.rolledDoubles && ROLL_DOUBLES_GETS_ANOTHER_TURN && newState.pendingDiceValues.length === (newState.diceValues?.[0] === newState.diceValues?.[1] ? 4 : 2) ) { // No moves made with any dice from a double roll
+    if (newState.rolledDoubles && ROLL_DOUBLES_GETS_ANOTHER_TURN && newState.pendingDiceValues.length === (newState.diceValues?.[0] === newState.diceValues?.[1] ? 4 : 2) ) { 
         newState.gameStatus = 'ROLL_DICE';
         newState.diceValues = null;
         newState.pendingDiceValues = [];
-        // `rolledDoubles` stays true for consecutive check, or reset if not tracking that.
         newState.diceRolledInTurn = false;
         newState.message = `No moves for ${PLAYER_NAMES[currentState.currentPlayer]}. Rolled doubles, ${PLAYER_NAMES[currentState.currentPlayer]} rolls again.`;
     } else {
@@ -301,7 +298,6 @@ export function playerHasAnyMoves(state: GameState): boolean {
   for (const token of playerTokens) {
       if (token.status === 'home' && token.position === HOME_COLUMN_LENGTH - 1) continue; 
       
-      // Check if any of the unique pending dice values can make a move with this token
       const uniquePendingDice = Array.from(new Set(state.pendingDiceValues));
       for (const dieValue of uniquePendingDice) {
         if (getValidMovesForDie(state, token.id, dieValue).length > 0) {
@@ -311,3 +307,4 @@ export function playerHasAnyMoves(state: GameState): boolean {
   }
   return false;
 }
+

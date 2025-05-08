@@ -1,7 +1,8 @@
 
 export type PlayerColor = 'RED' | 'GREEN' | 'YELLOW' | 'BLUE';
 export const PLAYER_COLORS: PlayerColor[] = ['RED', 'GREEN', 'YELLOW', 'BLUE'];
-export const ACTIVE_PLAYER_COLORS: PlayerColor[] = ['RED', 'GREEN', 'YELLOW', 'BLUE']; // For 4-player game
+// export const ACTIVE_PLAYER_COLORS: PlayerColor[] = ['RED', 'GREEN', 'YELLOW', 'BLUE']; // For 4-player game
+export const ACTIVE_PLAYER_COLORS: PlayerColor[] = ['RED', 'YELLOW']; // For 2-player game
 
 export type TokenStatus = 'base' | 'track' | 'home';
 
@@ -24,6 +25,7 @@ export interface GameState {
   winner: PlayerColor | null;
   message: string; // To display game messages/instructions
   humanPlayerColor: PlayerColor | null; // Identifies the color controlled by the human player
+  aiPlayerColor?: PlayerColor | null; // Identifies the color controlled by the AI player
   // numConsecutiveDoubles: number; // For future advanced rules like 3 doubles penalty
 }
 

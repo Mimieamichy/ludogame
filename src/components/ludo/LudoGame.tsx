@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { GameState, Token, ValidMove, PlayerColor } from '@/types/ludo';
-import { INITIAL_GAME_STATE, PLAYER_NAMES, ACTIVE_PLAYER_COLORS, PLAYER_TAILWIND_COLORS } from '@/lib/ludo-constants';
+import { ACTIVE_PLAYER_COLORS } from '@/types/ludo'; // Import ACTIVE_PLAYER_COLORS from types
+import { INITIAL_GAME_STATE, PLAYER_NAMES, PLAYER_TAILWIND_COLORS } from '@/lib/ludo-constants';
 import { rollDice, applyMove, getAllPossibleMoves, playerHasAnyMoves, passTurn, getNextPlayer } from '@/lib/ludo-logic';
 import Board from './Board';
 import Dice from './Dice';
@@ -22,24 +23,36 @@ export default function LudoGame() {
 
 
   useEffect(() => {
-    if (gameState.gameStatus === 'START_GAME' && gameState.humanPlayerColor) {
+    if (gameState.gameStatus === 'START_GAME' && gameState.humanPlayerColor && gameState.aiPlayerColor) {
+        // Determine who starts. For simplicity, human can start or a random active player.
+        // Let's make the human player always start if they selected a color.
         setGameState(prev => ({
             ...prev, 
             gameStatus: 'ROLL_DICE',
-            currentPlayer: prev.humanPlayerColor!, // Start with human player if selected
+            currentPlayer: prev.humanPlayerColor!, 
             message: `${PLAYER_NAMES[prev.humanPlayerColor!]}'s turn. Roll the dice.`
         }));
     }
-  }, [gameState.gameStatus, gameState.humanPlayerColor]);
+  }, [gameState.gameStatus, gameState.humanPlayerColor, gameState.aiPlayerColor]);
 
 
   const handleColorSelect = (color: PlayerColor) => {
+    const aiColor = ACTIVE_PLAYER_COLORS.find(c => c !== color);
+    if (!aiColor) {
+        // This should not happen if ACTIVE_PLAYER_COLORS has 2 elements
+        console.error("Could not assign AI color");
+        // Fallback or error state
+        setGameState(prev => ({...prev, message: "Error setting up AI player. Please reset."}));
+        return;
+    }
+
     setGameState(prev => ({
         ...prev,
         humanPlayerColor: color,
+        aiPlayerColor: aiColor,
         currentPlayer: color, // Human player starts
-        gameStatus: 'ROLL_DICE',
-        message: `You are ${PLAYER_NAMES[color]}. Roll the dice to start!`
+        gameStatus: 'ROLL_DICE', // Transition to ROLL_DICE directly
+        message: `You are ${PLAYER_NAMES[color]}. Your AI opponent is ${PLAYER_NAMES[aiColor]}. Roll the dice to start!`
     }));
   };
 
@@ -106,10 +119,10 @@ export default function LudoGame() {
         setHighlightedMoves([]);
     }
     setShowPassButton(false); 
-  }, [gameState, selectedTokenId, highlightedMoves, gameState.humanPlayerColor, gameState.currentPlayer]);
+  }, [gameState, selectedTokenId, highlightedMoves]);
 
   const handlePassTurn = useCallback(() => {
-    if (gameState.currentPlayer !== gameState.humanPlayerColor) return; // Only human can pass their turn
+    if (gameState.currentPlayer !== gameState.humanPlayerColor) return; 
     if (showPassButton && ((gameState.gameStatus === 'ROLL_DICE' && gameState.diceRolledInTurn) || 
                            (gameState.gameStatus === 'SELECT_TOKEN' && !playerHasAnyMoves(gameState))) ) {
         setGameState(prev => passTurn(prev));
@@ -128,8 +141,7 @@ export default function LudoGame() {
 
   useEffect(() => {
     // AI Player Logic
-    if (gameState.humanPlayerColor && gameState.currentPlayer !== gameState.humanPlayerColor && gameState.gameStatus !== 'GAME_OVER' && gameState.gameStatus !== 'COLOR_SELECTION') {
-        // Simple AI: wait a bit, then roll or make a move
+    if (gameState.humanPlayerColor && gameState.aiPlayerColor && gameState.currentPlayer === gameState.aiPlayerColor && gameState.gameStatus !== 'GAME_OVER' && gameState.gameStatus !== 'COLOR_SELECTION') {
         const aiActionTimeout = setTimeout(() => {
             if (gameState.gameStatus === 'ROLL_DICE' && !gameState.diceRolledInTurn) {
                 const diceResults = rollDice();
@@ -141,22 +153,26 @@ export default function LudoGame() {
                     if (hasMoves) {
                         return { ...newState, gameStatus: 'SELECT_TOKEN', message: `AI (${PLAYER_NAMES[prev.currentPlayer]}) rolled ${diceResults[0]} & ${diceResults[1]}. AI is thinking...` };
                     } else {
-                        // AI has no moves, so it effectively passes.
                         return passTurn({...newState, message: `AI (${PLAYER_NAMES[prev.currentPlayer]}) rolled ${diceResults[0]} & ${diceResults[1]}. No moves. Passing.`});
                     }
                 });
             } else if (gameState.gameStatus === 'SELECT_TOKEN') {
                 const possibleMoves = getAllPossibleMoves(gameState);
                 if (possibleMoves.length > 0) {
-                    // Simple AI: pick the first valid move
-                    const aiMove = possibleMoves[0]; 
-                    setGameState(applyMove(gameState, aiMove));
+                    // Basic AI: Prefer moves that capture or move out of base, or move furthest
+                    let bestMove = possibleMoves[0];
+                    for (const move of possibleMoves) {
+                        if (move.captureTargetId) { bestMove = move; break; } // Prioritize capture
+                        const token = gameState.tokens.find(t => t.id === move.tokenId);
+                        if (token?.status === 'base' && move.newStatus === 'track') { bestMove = move; } // Prioritize moving out
+                        else if (move.newPathProgress > bestMove.newPathProgress) { bestMove = move; } // Prefer moving further
+                    }
+                    setGameState(applyMove(gameState, bestMove));
                 } else {
-                    // No moves available for AI with current dice, should pass
                      setGameState(passTurn(gameState));
                 }
             }
-        }, 1500); // AI "thinking" time
+        }, 1500); 
 
         return () => clearTimeout(aiActionTimeout);
     }
@@ -178,7 +194,10 @@ export default function LudoGame() {
             if (selectedTokenId) {
                  setHighlightedMoves(allPlayerMoves.filter(m => m.tokenId === selectedTokenId));
             } else {
-                 setHighlightedMoves(allPlayerMoves); 
+                 // If no token selected, highlight all possible moves for the player to see options
+                 // This can be noisy, consider only highlighting when a token is selected or not at all before selection.
+                 // For now, let's keep it simple and not pre-highlight all moves.
+                 setHighlightedMoves([]); // Or set to allPlayerMoves if desired.
             }
         }
     } else if (gameState.gameStatus !== 'SELECT_TOKEN') {
@@ -203,10 +222,10 @@ export default function LudoGame() {
                         <Palette className="mr-3 h-8 w-8" /> Choose Your Color
                     </CardTitle>
                     <CardDescription className="text-center text-muted-foreground">
-                        Select which color you want to play as. The other players will be AI.
+                        Select which color you want to play as. The AI will take the other color.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4 p-6">
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
                     {ACTIVE_PLAYER_COLORS.map(color => (
                         <Button
                             key={color}
@@ -234,6 +253,7 @@ export default function LudoGame() {
         <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-500 to-red-500">
           Ludo Master Pro
         </h1>
+        <p className="text-muted-foreground">Two Player Mode: You vs AI</p>
       </header>
 
       {gameState.gameStatus === 'GAME_OVER' && gameState.winner && (
@@ -259,7 +279,7 @@ export default function LudoGame() {
                             : 'bg-muted text-muted-foreground hover:bg-muted/80'
                         }`}
                 >
-                    {PLAYER_NAMES[color]} {color === gameState.humanPlayerColor ? "(You)" : "(AI)"}
+                    {PLAYER_NAMES[color]} {color === gameState.humanPlayerColor ? "(You)" : (color === gameState.aiPlayerColor ? "(AI)" : "")}
                 </div>
              ))}
         </div>
