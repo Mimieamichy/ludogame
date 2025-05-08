@@ -96,7 +96,7 @@ export const HOME_PATH_COORDINATES: Record<PlayerColor, [number, number][]> = {
   // For GREEN (Player on the right side, path ends at [6,14] before home): home path is [1,7],[2,7],[3,7],[4,7],[5,7],[6,7] (downwards on col 7)
   // This seems to be a common representation where green is on top.
   // If green is on the right, its home path is horizontal:
-  GREEN:  [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]], // This would be if Green was like Yellow but on top.
+  // GREEN:  [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]], // This would be if Green was like Yellow but on top.
                                                       // The track for Green ends near [7,14] (idx 24). So home path is LEFT on row 7 from col 13 to 8.
                                                       // This is IDENTICAL TO YELLOW if Yellow's track ended there.
                                                       // Let's use standard Ludo paths:
@@ -113,7 +113,7 @@ export const HOME_PATH_COORDINATES: Record<PlayerColor, [number, number][]> = {
   // Re-evaluating HOME_PATH_COORDINATES based on standard Ludo and clockwise TRACK_COORDINATES:
   // RED: Correct. Path ends near [6,0], home entry is [7,1]..[7,6] (moving right)
   // GREEN: Path ends near [0,8], home entry is [1,7]..[6,7] (moving down)
-  GREEN:  [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]], 
+  // GREEN:  [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]], 
   // YELLOW: Path ends near [8,14], home entry is [7,13]..[7,8] (moving left) - This is correct for Yellow.
   YELLOW: [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]],
   // BLUE: Path ends near [14,6], home entry is [13,7]..[8,7] (moving up)
