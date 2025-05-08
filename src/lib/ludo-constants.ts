@@ -1,3 +1,4 @@
+
 import type { PlayerColor, BoardCell, Token, GameState } from '@/types/ludo';
 import { PLAYER_COLORS as ALL_PLAYER_COLORS, ACTIVE_PLAYER_COLORS } from '@/types/ludo'; // Import ACTIVE_PLAYER_COLORS
 
@@ -26,7 +27,7 @@ export const SAFE_SQUARE_INDICES: number[] = [
   PLAYER_START_OFFSETS.GREEN,
   PLAYER_START_OFFSETS.YELLOW,
   PLAYER_START_OFFSETS.BLUE,
-  (PLAYER_START_OFFSETS.RED + 8) % TRACK_LENGTH,
+  (PLAYER_START_OFFSETS.RED + 8) % TRACK_LENGTH, // Note: 8 is a traditional safe spot offset
   (PLAYER_START_OFFSETS.GREEN + 8) % TRACK_LENGTH,
   (PLAYER_START_OFFSETS.YELLOW + 8) % TRACK_LENGTH,
   (PLAYER_START_OFFSETS.BLUE + 8) % TRACK_LENGTH,
@@ -43,37 +44,37 @@ export const BASE_TOKEN_POSITIONS: Record<PlayerColor, [number, number][]> = {
 };
 
 export const TRACK_COORDINATES: [number, number][] = [
-    // Red Path (starts at [6,1], global index 0) - Moves UP then RIGHT
-    [6,1],[5,1],[4,1],[3,1],[2,1],[1,1], // 0-5 (Red's first arm, UP on col 1)
-    [0,1],                               // 6   (Red's top-left corner)
-    [0,2],[0,3],[0,4],[0,5],[0,6],       // 7-11(Red's second arm, RIGHT on row 0) - This is 5 squares
-    [0,7],                               // 12  (Red's top-right corner, leads to Green's path)
+    // Red Path (starts at [6,1], global index 0) - Moves RIGHT then UP
+    [6,1],[6,2],[6,3],[6,4],[6,5],[6,6],       // 0-5 (Red's first arm, 6 squares RIGHT on row 6)
+    [6,7],                               // 6   (Red's corner)
+    [5,7],[4,7],[3,7],[2,7],[1,7],       // 7-11(Red's second arm, 5 squares UP on col 7)
+    [0,7],                               // 12  (Red's corner, next is Green's path at [1,8])
 
     // Green Path (starts at [1,8], global index 13) - Moves RIGHT then DOWN
-    [1,8],[1,9],[1,10],[1,11],[1,12],[1,13], // 13-18 (Green's first arm, RIGHT on row 1)
-    [1,14],                              // 19  (Green's top-right corner)
-    [2,14],[3,14],[4,14],[5,14],[6,14],     // 20-24 (Green's second arm, DOWN on col 14) - This is 5 squares
-    [7,14],                              // 25  (Green's bottom-right corner, leads to Yellow's path)
+    [1,8],[1,9],[1,10],[1,11],[1,12],[1,13], // 13-18 (Green's first arm, 6 squares RIGHT on row 1)
+    [1,14],                              // 19  (Green's corner)
+    [2,14],[3,14],[4,14],[5,14],[6,14],     // 20-24 (Green's second arm, 5 squares DOWN on col 14)
+    [7,14],                              // 25  (Green's corner, next is Yellow's path at [8,13])
 
-    // Yellow Path (starts at [8,13], global index 26) - Moves LEFT then DOWN (User Request Change)
-    [8,13],[8,12],[8,11],[8,10],[8,9],[8,8], // 26-31 (Yellow's first arm, LEFT on row 8) - 6 squares
-    [8,7],                               // 32  (Yellow's new top-left style corner)
-    [9,7],[10,7],[11,7],[12,7],[13,7],   // 33-37 (Yellow's second arm, DOWN on col 7) - 5 squares
-    [14,7],                              // 38  (Yellow's new bottom-left style corner, leads to Blue's path)
+    // Yellow Path (starts at [8,13], global index 26) - Moves LEFT then DOWN
+    [8,13],[8,12],[8,11],[8,10],[8,9],[8,8], // 26-31 (Yellow's first arm, 6 squares LEFT on row 8)
+    [8,7],                               // 32  (Yellow's corner)
+    [9,7],[10,7],[11,7],[12,7],[13,7],   // 33-37 (Yellow's second arm, 5 squares DOWN on col 7)
+    [14,7],                              // 38  (Yellow's corner, next is Blue's path at [13,6])
 
     // Blue Path (starts at [13,6], global index 39) - Moves LEFT then UP
-    [13,6],[13,5],[13,4],[13,3],[13,2],[13,1], // 39-44 (Blue's first arm, LEFT on row 13)
-    [13,0],                              // 45  (Blue's bottom-left corner)
-    [12,0],[11,0],[10,0],[9,0],[8,0],     // 46-50 (Blue's second arm, UP on col 0) - This is 5 squares
-    [7,0],                               // 51  (Blue's top-left corner, leads to Red's path / home entry for Red)
+    [13,6],[13,5],[13,4],[13,3],[13,2],[13,1], // 39-44 (Blue's first arm, 6 squares LEFT on row 13)
+    [13,0],                              // 45  (Blue's corner)
+    [12,0],[11,0],[10,0],[9,0],[8,0],     // 46-50 (Blue's second arm, 5 squares UP on col 0)
+    [7,0],                               // 51  (Blue's corner, next is Red's path at [6,1])
 ];
 
 
 export const HOME_PATH_COORDINATES: Record<PlayerColor, [number, number][]> = {
-  RED:    [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]],  // Moves RIGHT into home
-  GREEN:  [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]],  // Moves DOWN into home
-  YELLOW: [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]], // Moves LEFT into home
-  BLUE:   [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]], // Moves UP into home
+  RED:    [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]],  // Enters from [7,0], moves RIGHT into home at row 7
+  GREEN:  [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]],  // Enters from [0,7], moves DOWN into home at col 7
+  YELLOW: [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]], // Enters from [7,14], moves LEFT into home at row 7
+  BLUE:   [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]], // Enters from [14,7], moves UP into home at col 7
 };
 
 export const BOARD_CELLS: BoardCell[] = (() => {
@@ -210,3 +211,4 @@ export const CAPTURE_SENDS_TO_BASE = true;
 export const HOME_ENTRY_EXACT_ROLL_REQUIRED = true; 
 export const STACKING_ALLOWED_ON_SAFE_SQUARES = true; 
 export const STACKING_ALLOWED_IN_HOME_COLUMN = true;
+
