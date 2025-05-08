@@ -1,4 +1,3 @@
-
 export type PlayerColor = 'RED' | 'GREEN' | 'YELLOW' | 'BLUE';
 export const PLAYER_COLORS: PlayerColor[] = ['RED', 'GREEN', 'YELLOW', 'BLUE'];
 // export const ACTIVE_PLAYER_COLORS: PlayerColor[] = ['RED', 'GREEN', 'YELLOW', 'BLUE']; // For 4-player game
@@ -41,9 +40,8 @@ export interface ValidMove {
 export interface BoardCell {
   row: number;
   col: number;
-  type: 'base' | 'track' | 'homepath' | 'center' | 'entry';
-  playerColor?: PlayerColor; // For base, homepath, entry
+  type: 'base' | 'track' | 'homepath' | 'center'; // Removed 'entry'
+  playerColor?: PlayerColor; // For base, homepath, and player-specific track start cells
   isSafe?: boolean; // For track cells
-  isStart?: PlayerColor; // Marks start square for a player
+  isStart?: PlayerColor; // Marks start square for a player on the track
 }
-

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -40,19 +39,17 @@ const BoardCell: React.FC<{ cell: BoardCellType; children?: React.ReactNode; onC
     textColor = cell.playerColor ? (PLAYER_TAILWIND_COLORS[cell.playerColor].text === 'text-yellow-900' ? 'text-black' : 'text-white') : 'text-white';
     borderColor = cell.playerColor ? PLAYER_TAILWIND_COLORS[cell.playerColor].border : 'border-gray-400';
   } else if (cell.type === 'track') {
-    if (cell.isStart) {
-      bgColor = cell.isStart ? PLAYER_TAILWIND_COLORS[cell.isStart].bg : bgColor;
-      textColor = cell.isStart ? (PLAYER_TAILWIND_COLORS[cell.isStart].text === 'text-yellow-900' ? 'text-black' : 'text-white') : textColor;
+    if (cell.isStart && cell.playerColor) { // Check if it's a player-specific start cell
+      bgColor = PLAYER_TAILWIND_COLORS[cell.playerColor].bg;
+      textColor = PLAYER_TAILWIND_COLORS[cell.playerColor].text === 'text-yellow-900' ? 'text-black' : 'text-white';
+      borderColor = PLAYER_TAILWIND_COLORS[cell.playerColor].border;
     }
   } else if (cell.type === 'center') {
     bgColor = 'bg-purple-300 dark:bg-purple-900'; 
     borderColor = 'border-purple-500 dark:border-purple-700';
-  } else if (cell.type === 'entry') {
-     bgColor = cell.playerColor ? PLAYER_TAILWIND_COLORS[cell.playerColor].bg : bgColor;
-     textColor = cell.playerColor ? (PLAYER_TAILWIND_COLORS[cell.playerColor].text === 'text-yellow-900' ? 'text-black' : 'text-white') : textColor;
   }
   
-  if (cell.type === 'homepath' && cell.playerColor && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][0] === cell.row && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][1] === cell.col) {
+  if (cell.type === 'homepath' && cell.playerColor && HOME_PATH_COORDINATES[cell.playerColor] && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][0] === cell.row && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][1] === cell.col) {
       bgColor = 'bg-purple-500 dark:bg-purple-700'; 
       textColor = 'text-white';
   }
@@ -74,7 +71,7 @@ const BoardCell: React.FC<{ cell: BoardCellType; children?: React.ReactNode; onC
     >
       {cell.type === 'track' && cell.isStart && <Star className="w-1/2 h-1/2 opacity-50" />}
       {cell.type === 'track' && cell.isSafe && !cell.isStart && <Zap className="w-1/2 h-1/2 opacity-30" />}
-      {cell.type === 'homepath' && cell.playerColor && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][0] === cell.row && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][1] === cell.col && (
+      {cell.type === 'homepath' && cell.playerColor && HOME_PATH_COORDINATES[cell.playerColor] && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][0] === cell.row && HOME_PATH_COORDINATES[cell.playerColor][HOME_PATH_COORDINATES[cell.playerColor].length-1][1] === cell.col && (
         <Home className="w-3/4 h-3/4 opacity-70"/>
       )}
       <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-0.5 p-0.5">
@@ -89,6 +86,12 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
   
   const getCellForToken = (token: Token): { row: number; col: number } => {
     if (token.status === 'base') {
+      // Ensure BASE_TOKEN_POSITIONS has entry for the token's player.
+      if (!BASE_TOKEN_POSITIONS[token.player]) {
+        // This can happen if a player color is used that is not in ACTIVE_PLAYER_COLORS and thus doesn't have base positions defined for it.
+        // console.warn(`No base positions for player ${token.player}. This might happen if player is not in ACTIVE_PLAYER_COLORS.`);
+        return {row: -1, col: -1}; // Or handle error appropriately
+      }
       return { row: BASE_TOKEN_POSITIONS[token.player][token.position][0], col: BASE_TOKEN_POSITIONS[token.player][token.position][1] };
     }
     if (token.status === 'track') {
@@ -96,6 +99,11 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
       return { row: TRACK_COORDINATES[trackPos][0], col: TRACK_COORDINATES[trackPos][1] };
     }
     if (token.status === 'home') {
+       // Ensure HOME_PATH_COORDINATES has entry for the token's player.
+      if (!HOME_PATH_COORDINATES[token.player]) {
+        // console.warn(`No home path for player ${token.player}.`);
+        return {row: -1, col: -1}; 
+      }
       const homePos = Math.min(token.position, HOME_PATH_COORDINATES[token.player].length - 1);
       return { row: HOME_PATH_COORDINATES[token.player][homePos][0], col: HOME_PATH_COORDINATES[token.player][homePos][1] };
     }
@@ -105,6 +113,7 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
   const tokensByCell: Record<string, Token[]> = {};
   tokens.forEach(token => {
     const { row, col } = getCellForToken(token);
+    if (row === -1 && col === -1) return; // Skip tokens that couldn't be placed
     const key = `${row}-${col}`;
     if (!tokensByCell[key]) {
       tokensByCell[key] = [];
@@ -121,10 +130,9 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
         
         const isHighlightedMoveTarget = highlightedMoves.find(move => {
           if (move.newStatus === 'track') return TRACK_COORDINATES[move.newPosition][0] === cellDef.row && TRACK_COORDINATES[move.newPosition][1] === cellDef.col;
-          // Make sure 'currentPlayer' in highlightedMoves check is indeed the player whose token is moving.
-          // For 'home' moves, the newPosition is relative to the token's player's home path.
           const movingToken = tokens.find(t => t.id === move.tokenId);
-          if (movingToken && move.newStatus === 'home') return HOME_PATH_COORDINATES[movingToken.player][move.newPosition][0] === cellDef.row && HOME_PATH_COORDINATES[movingToken.player][move.newPosition][1] === cellDef.col;
+          // Ensure HOME_PATH_COORDINATES[movingToken.player] exists before accessing it.
+          if (movingToken && HOME_PATH_COORDINATES[movingToken.player] && move.newStatus === 'home') return HOME_PATH_COORDINATES[movingToken.player][move.newPosition][0] === cellDef.row && HOME_PATH_COORDINATES[movingToken.player][move.newPosition][1] === cellDef.col;
           return false;
         });
 
@@ -152,4 +160,3 @@ const Board: React.FC<BoardProps> = ({ tokens, onTokenSelect, selectedTokenId, h
 };
 
 export default Board;
-

@@ -1,4 +1,3 @@
-
 import type { PlayerColor, BoardCell, Token, GameState } from '@/types/ludo';
 import { PLAYER_COLORS as ALL_PLAYER_COLORS, ACTIVE_PLAYER_COLORS } from '@/types/ludo'; // Import ACTIVE_PLAYER_COLORS
 
@@ -38,9 +37,9 @@ export const GRID_SIZE = 15;
 
 export const BASE_TOKEN_POSITIONS: Record<PlayerColor, [number, number][]> = {
   RED:    [[1,1], [1,4], [4,1], [4,4]],
-  GREEN:  [[1,10], [1,13], [4,10], [4,13]],
+  GREEN:  [[1,10], [1,13], [4,10], [4,13]], // Only RED and YELLOW are active, but kept for completeness
   YELLOW: [[10,10], [10,13], [13,10], [13,13]],
-  BLUE:   [[10,1], [10,4], [13,1], [13,4]],
+  BLUE:   [[10,1], [10,4], [13,1], [13,4]], // Only RED and YELLOW are active, but kept for completeness
 };
 
 export const TRACK_COORDINATES: [number, number][] = [
@@ -54,7 +53,7 @@ export const TRACK_COORDINATES: [number, number][] = [
     [7,8], // 19 (Corner)
     [8,7],[8,6],[8,5],[8,4],[8,3],[8,2], // 20-25
     // Yellow Path (indexes 26-38)
-    [8,13],[9,13],[10,13],[11,13],[12,13],[13,13], // 26-31. Corrected from Board.tsx as (8,13) should be PLAYER_START_OFFSETS.YELLOW=26
+    [8,13],[9,13],[10,13],[11,13],[12,13],[13,13], // 26-31
     [14,13], // 32 (Corner)
     [14,12],[14,11],[14,10],[14,9],[14,8], // 33-37
     [14,7], // 38 (Corner to Blue)
@@ -67,9 +66,9 @@ export const TRACK_COORDINATES: [number, number][] = [
 
 export const HOME_PATH_COORDINATES: Record<PlayerColor, [number, number][]> = {
   RED:    [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]], 
-  GREEN:  [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]], 
+  GREEN:  [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]], // Only RED and YELLOW are active
   YELLOW: [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]], 
-  BLUE:   [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]], 
+  BLUE:   [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]], // Only RED and YELLOW are active
 };
 
 export const BOARD_CELLS: BoardCell[] = (() => {
@@ -78,42 +77,58 @@ export const BOARD_CELLS: BoardCell[] = (() => {
     for (let c = 0; c < GRID_SIZE; c++) {
       let cell: BoardCell = { row: r, col: c, type: 'center' }; 
 
+      // Define Base areas
       if ((r >=0 && r <=5 && c >=0 && c <=5)) cell = { ...cell, type: 'base', playerColor: 'RED' };
       else if ((r >=0 && r <=5 && c >=9 && c <=14)) cell = { ...cell, type: 'base', playerColor: 'GREEN' };
       else if ((r >=9 && r <=14 && c >=9 && c <=14)) cell = { ...cell, type: 'base', playerColor: 'YELLOW' };
       else if ((r >=9 && r <=14 && c >=0 && c <=5)) cell = { ...cell, type: 'base', playerColor: 'BLUE' };
 
+      // Define Track cells, including player start cells
       TRACK_COORDINATES.forEach((trackCoord, index) => {
         if (trackCoord[0] === r && trackCoord[1] === c) {
-          cell = {
-            ...cell,
+          cell = { // cell is initially type 'center' or 'base', track properties override
+            row: r, // ensure row/col are not lost from initial base definition if overlapped by track logic
+            col: c,
             type: 'track',
             isSafe: SAFE_SQUARE_INDICES.includes(index), 
           };
-          if (index === PLAYER_START_OFFSETS.RED) { cell.isStart = 'RED'; cell.playerColor = 'RED'; cell.type = 'entry'; }
-          if (index === PLAYER_START_OFFSETS.GREEN) { cell.isStart = 'GREEN'; cell.playerColor = 'GREEN'; cell.type = 'entry'; }
-          if (index === PLAYER_START_OFFSETS.YELLOW) { cell.isStart = 'YELLOW'; cell.playerColor = 'YELLOW'; cell.type = 'entry'; }
-          if (index === PLAYER_START_OFFSETS.BLUE) { cell.isStart = 'BLUE'; cell.playerColor = 'BLUE'; cell.type = 'entry'; }
+          // Assign playerColor and isStart for player-specific start cells
+          if (index === PLAYER_START_OFFSETS.RED) { cell.isStart = 'RED'; cell.playerColor = 'RED';}
+          else if (index === PLAYER_START_OFFSETS.GREEN) { cell.isStart = 'GREEN'; cell.playerColor = 'GREEN';}
+          else if (index === PLAYER_START_OFFSETS.YELLOW) { cell.isStart = 'YELLOW'; cell.playerColor = 'YELLOW';}
+          else if (index === PLAYER_START_OFFSETS.BLUE) { cell.isStart = 'BLUE'; cell.playerColor = 'BLUE';}
         }
       });
 
+      // Define Home Path cells
       (Object.keys(HOME_PATH_COORDINATES) as PlayerColor[]).forEach(color => {
         HOME_PATH_COORDINATES[color].forEach(homeCoord => {
           if (homeCoord[0] === r && homeCoord[1] === c) {
-            cell = { ...cell, type: 'homepath', playerColor: color };
+            cell = { // cell could be 'center' or already 'track', homepath properties override
+              row: r, 
+              col: c, 
+              type: 'homepath', 
+              playerColor: color 
+            };
           }
         });
       });
       
-      if (r >= 6 && r <= 8 && c >= 6 && c <= 8) { // Define the central home area
-        cell = { ...cell, type: 'center' }; 
+      // Define the central Home area (innermost part of the cross)
+      if (r >= 6 && r <= 8 && c >= 6 && c <= 8) { 
+        let isCenterHomePathEnd = false;
+        (Object.keys(HOME_PATH_COORDINATES) as PlayerColor[]).forEach(color => {
+            if (HOME_PATH_COORDINATES[color]) { // Check if the color is active
+                const finalHomePos = HOME_PATH_COORDINATES[color][HOME_COLUMN_LENGTH-1];
+                if (finalHomePos[0] === r && finalHomePos[1] === c) {
+                    isCenterHomePathEnd = true;
+                }
+            }
+        });
+        if (!isCenterHomePathEnd) { // if not an end of a home path, it's a center cell
+            cell = { row: r, col: c, type: 'center' }; 
+        }
       }
-      // Specifically mark the final home cell within the home path for each player
-      HOME_PATH_COORDINATES.RED.forEach((hc, idx) => { if(idx === HOME_COLUMN_LENGTH -1 && hc[0] === r && hc[1] === c) cell.type = 'homepath'});
-      HOME_PATH_COORDINATES.GREEN.forEach((hc, idx) => { if(idx === HOME_COLUMN_LENGTH -1 && hc[0] === r && hc[1] === c) cell.type = 'homepath'});
-      HOME_PATH_COORDINATES.YELLOW.forEach((hc, idx) => { if(idx === HOME_COLUMN_LENGTH -1 && hc[0] === r && hc[1] === c) cell.type = 'homepath'});
-      HOME_PATH_COORDINATES.BLUE.forEach((hc, idx) => { if(idx === HOME_COLUMN_LENGTH -1 && hc[0] === r && hc[1] === c) cell.type = 'homepath'});
-
 
       cells.push(cell);
     }
@@ -191,4 +206,3 @@ export const HOME_ENTRY_EXACT_ROLL_REQUIRED = true;
 export const STACKING_ALLOWED_ON_SAFE_SQUARES = true; 
 export const STACKING_ALLOWED_IN_HOME_COLUMN = true;
 // ACTIVE_PLAYER_COLORS is already defined and imported at the top from types/ludo.ts
-
