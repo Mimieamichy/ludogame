@@ -387,7 +387,7 @@ export default function LudoGame() {
         </div>
       </div>
       <footer className="mt-8 text-sm text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} Ludo Master Pro. You vs AI Edition.</p>
+        <p>&copy; {new Date().getFullYear()} Mae Techs.</p>
       </footer>
     </div>
   );
